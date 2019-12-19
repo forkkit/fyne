@@ -17,30 +17,49 @@ type LinearGradient struct {
 }
 
 // Generate calculates an image of the gradient with the specified width and height.
-func (g *LinearGradient) Generate(w, h int) image.Image {
-	var generator func(x, y, w, h float64) float64
-	if g.Angle == 90 {
-		// horizontal flipped
-		generator = func(x, _, w, _ float64) float64 {
-			return ((w - 1) - x) / (w - 1)
+func (g *LinearGradient) Generate(iw, ih int) image.Image {
+	w, h := float64(iw), float64(ih)
+	var generator func(x, y float64) float64
+	switch g.Angle {
+	case 90: // horizontal flipped
+		generator = func(x, _ float64) float64 {
+			return (w - x) / w
 		}
-	} else if g.Angle == 270 {
-		// horizontal
-		generator = func(x, _, w, _ float64) float64 {
-			return x / (w - 1)
+	case 270: // horizontal
+		generator = func(x, _ float64) float64 {
+			return x / w
 		}
-	} else if g.Angle == 180 {
-		// vertical flipped
-		generator = func(_, y, _, h float64) float64 {
-			return ((h - 1) - y) / (h - 1)
+	case 45: // diagonal negative flipped
+		generator = func(x, y float64) float64 {
+			return math.Abs((w+h)-(x+h-y)) / math.Abs(w+h)
 		}
-	} else {
-		// vertical
-		generator = func(_, y, _, h float64) float64 {
-			return y / (h - 1)
+	case 225: // diagonal negative
+		generator = func(x, y float64) float64 {
+			return math.Abs(x+h-y) / math.Abs(w+h)
+		}
+	case 135: // diagonal positive flipped
+		generator = func(x, y float64) float64 {
+			return math.Abs((w+h)-(x+y)) / math.Abs(w+h)
+		}
+	case 315: // diagonal positive
+		generator = func(x, y float64) float64 {
+			return math.Abs(x+y) / math.Abs(w+h)
+		}
+	case 180: // vertical flipped
+		generator = func(_, y float64) float64 {
+			return (h - y) / h
+		}
+	default: // vertical
+		generator = func(_, y float64) float64 {
+			return y / h
 		}
 	}
-	return computeGradient(generator, w, h, g.StartColor, g.EndColor)
+	return computeGradient(generator, iw, ih, g.StartColor, g.EndColor)
+}
+
+// Refresh causes this object to be redrawn in it's current state
+func (g *LinearGradient) Refresh() {
+	Refresh(g)
 }
 
 // RadialGradient defines a Gradient travelling radially from a center point outward.
@@ -56,25 +75,26 @@ type RadialGradient struct {
 }
 
 // Generate calculates an image of the gradient with the specified width and height.
-func (g *RadialGradient) Generate(w, h int) image.Image {
-	generator := func(x, y, w, h float64) float64 {
-		// define center plus offset
-		centerX := w/2 + w*g.CenterOffsetX
-		centerY := h/2 + h*g.CenterOffsetY
+func (g *RadialGradient) Generate(iw, ih int) image.Image {
+	w, h := float64(iw), float64(ih)
+	// define center plus offset
+	centerX := w/2 + w*g.CenterOffsetX
+	centerY := h/2 + h*g.CenterOffsetY
 
-		// handle negative offsets
-		var a, b float64
-		if g.CenterOffsetX < 0 {
-			a = w - centerX
-		} else {
-			a = centerX
-		}
-		if g.CenterOffsetY < 0 {
-			b = h - centerY
-		} else {
-			b = centerY
-		}
+	// handle negative offsets
+	var a, b float64
+	if g.CenterOffsetX < 0 {
+		a = w - centerX
+	} else {
+		a = centerX
+	}
+	if g.CenterOffsetY < 0 {
+		b = h - centerY
+	} else {
+		b = centerY
+	}
 
+	generator := func(x, y float64) float64 {
 		// calculate distance from center for gradient multiplier
 		dx, dy := centerX-x, centerY-y
 		da := math.Sqrt(dx*dx + dy*dy*a*a/b/b)
@@ -83,7 +103,12 @@ func (g *RadialGradient) Generate(w, h int) image.Image {
 		}
 		return da / a
 	}
-	return computeGradient(generator, w, h, g.StartColor, g.EndColor)
+	return computeGradient(generator, iw, ih, g.StartColor, g.EndColor)
+}
+
+// Refresh causes this object to be redrawn in it's current state
+func (g *RadialGradient) Refresh() {
+	Refresh(g)
 }
 
 func calculatePixel(d float64, startColor, endColor color.Color) *color.RGBA64 {
@@ -108,7 +133,7 @@ func calculatePixel(d float64, startColor, endColor color.Color) *color.RGBA64 {
 	return pixel
 }
 
-func computeGradient(generator func(x, y, w, h float64) float64, w, h int, startColor, endColor color.Color) image.Image {
+func computeGradient(generator func(x, y float64) float64, w, h int, startColor, endColor color.Color) image.Image {
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
 
 	if startColor == nil && endColor == nil {
@@ -121,7 +146,7 @@ func computeGradient(generator func(x, y, w, h float64) float64, w, h int, start
 
 	for x := 0; x < w; x++ {
 		for y := 0; y < h; y++ {
-			distance := generator(float64(x), float64(y), float64(w), float64(h))
+			distance := generator(float64(x)+0.5, float64(y)+0.5)
 			img.Set(x, y, calculatePixel(distance, startColor, endColor))
 		}
 	}
@@ -129,9 +154,19 @@ func computeGradient(generator func(x, y, w, h float64) float64, w, h int, start
 }
 
 // NewHorizontalGradient creates a new horizontally travelling linear gradient.
+// The start color will be at the left of the gradient and the end color will be at the right.
 func NewHorizontalGradient(start, end color.Color) *LinearGradient {
 	g := &LinearGradient{StartColor: start, EndColor: end}
 	g.Angle = 270
+	return g
+}
+
+// NewLinearGradient creates a linear gradient at a the specified angle.
+// The angle parameter is the degree angle along which the gradient is calculated.
+// A NewHorizontalGradient uses 270 degrees and NewVerticalGradient is 0 degrees.
+func NewLinearGradient(start, end color.Color, angle float64) *LinearGradient {
+	g := &LinearGradient{StartColor: start, EndColor: end}
+	g.Angle = angle
 	return g
 }
 
@@ -141,6 +176,7 @@ func NewRadialGradient(start, end color.Color) *RadialGradient {
 }
 
 // NewVerticalGradient creates a new vertically travelling linear gradient.
+// The start color will be at the top of the gradient and the end color will be at the bottom.
 func NewVerticalGradient(start color.Color, end color.Color) *LinearGradient {
 	return &LinearGradient{StartColor: start, EndColor: end}
 }

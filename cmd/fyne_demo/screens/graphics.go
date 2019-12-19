@@ -2,12 +2,12 @@ package screens
 
 import (
 	"image/color"
+	"time"
 
 	"fyne.io/fyne"
 	"fyne.io/fyne/canvas"
 	"fyne.io/fyne/layout"
 	"fyne.io/fyne/theme"
-	"fyne.io/fyne/widget"
 )
 
 func rgbGradient(x, y, w, h int) color.Color {
@@ -19,6 +19,18 @@ func rgbGradient(x, y, w, h int) color.Color {
 
 // GraphicsScreen loads a graphics example panel for the demo app
 func GraphicsScreen() fyne.CanvasObject {
+	gradient := canvas.NewHorizontalGradient(color.RGBA{0x80, 0, 0, 0xff}, color.RGBA{0, 0x80, 0, 0xff})
+	go func() {
+		for {
+			time.Sleep(time.Second)
+
+			gradient.Angle += 45
+			if gradient.Angle >= 360 {
+				gradient.Angle -= 360
+			}
+			canvas.Refresh(gradient)
+		}
+	}()
 	content := fyne.NewContainerWithLayout(layout.NewFixedGridLayout(fyne.NewSize(90, 90)),
 		&canvas.Rectangle{FillColor: color.RGBA{0x80, 0, 0, 0xff},
 			StrokeColor: color.RGBA{0xff, 0xff, 0xff, 0xff},
@@ -30,13 +42,9 @@ func GraphicsScreen() fyne.CanvasObject {
 			StrokeWidth: 2},
 		canvas.NewText("Text", color.RGBA{0, 0x80, 0, 0xff}),
 		canvas.NewRasterWithPixels(rgbGradient),
-		canvas.NewHorizontalGradient(color.RGBA{0x80, 0, 0, 0xff}, color.RGBA{0, 0x80, 0, 0xff}),
-		canvas.NewVerticalGradient(color.RGBA{0x80, 0, 0, 0xff}, color.RGBA{0, 0, 0x80, 0xff}),
+		gradient,
 		canvas.NewRadialGradient(color.RGBA{0x80, 0, 0, 0xff}, color.RGBA{0, 0x80, 0x80, 0xff}),
 	)
 
-	headings := fyne.NewContainerWithLayout(layout.NewGridLayout(2),
-		widget.NewGroup("Canvas objects"), widget.NewGroup("Theme icons"))
-	return fyne.NewContainerWithLayout(layout.NewBorderLayout(headings, nil, nil, nil), headings,
-		fyne.NewContainerWithLayout(layout.NewGridLayout(2), content, IconsPanel()))
+	return fyne.NewContainerWithLayout(layout.NewAdaptiveGridLayout(2), content, IconsPanel())
 }

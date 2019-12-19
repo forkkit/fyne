@@ -13,12 +13,12 @@ import (
 )
 
 func entryRenderTexts(e *Entry) []*canvas.Text {
-	textWid := Renderer(e).(*entryRenderer).text
+	textWid := e.text
 	return Renderer(textWid).(*textRenderer).texts
 }
 
 func entryRenderPlaceholderTexts(e *Entry) []*canvas.Text {
-	textWid := Renderer(e).(*entryRenderer).placeholder
+	textWid := e.placeholder
 	return Renderer(textWid).(*textRenderer).texts
 }
 
@@ -63,11 +63,11 @@ func TestEntry_SetPlaceHolder(t *testing.T) {
 	assert.Equal(t, 0, len(entry.Text))
 	assert.Equal(t, 0, entry.textProvider().len())
 	assert.Equal(t, 4, entry.placeholderProvider().len())
-	assert.False(t, entry.placeholderProvider().Hidden)
+	assert.True(t, entry.placeholderProvider().Visible())
 
 	entry.SetText("Hi")
 	assert.Equal(t, 2, len(entry.Text))
-	assert.True(t, entry.placeholderProvider().Hidden)
+	assert.False(t, entry.placeholderProvider().Visible())
 
 	assert.Equal(t, 2, entry.textProvider().len())
 }
@@ -388,6 +388,119 @@ func TestEntry_Tapped_AfterRow(t *testing.T) {
 
 	assert.Equal(t, 2, entry.CursorRow)
 	assert.Equal(t, 0, entry.CursorColumn)
+}
+
+func TestEntry_PasteFromClipboard(t *testing.T) {
+	entry := NewEntry()
+
+	w := test.NewApp().NewWindow("")
+	w.SetContent(entry)
+
+	testContent := "test"
+
+	clipboard := fyne.CurrentApp().Driver().AllWindows()[0].Clipboard()
+	clipboard.SetContent(testContent)
+
+	entry.pasteFromClipboard(clipboard)
+
+	assert.Equal(t, entry.Text, testContent)
+}
+
+func TestEntry_TappedSecondary(t *testing.T) {
+	// fresh app for this test
+	test.NewApp()
+	// don't let our app hang around for too long
+	defer test.NewApp()
+
+	entry := NewEntry()
+	fyne.CurrentApp().Driver().CanvasForObject(entry).(test.WindowlessCanvas).Resize(fyne.NewSize(100, 150))
+
+	tapPos := fyne.NewPos(1, 1)
+	test.TapSecondaryAt(entry, tapPos)
+
+	over := fyne.CurrentApp().Driver().CanvasForObject(entry).Overlay()
+	pos := fyne.CurrentApp().Driver().AbsolutePositionForObject(over)
+	assert.NotNil(t, over)
+
+	cont := over.(*PopUp).Content
+	assert.Equal(t, pos.X+theme.Padding()+tapPos.X, cont.Position().X)
+	assert.Equal(t, pos.Y+theme.Padding()+tapPos.Y, cont.Position().Y)
+
+	items := cont.(*Box).Children
+	assert.Equal(t, 4, len(items)) // Cut, Copy, Paste, Select All
+	test.Tap(entry.popUp)
+
+	entry.Disable()
+
+	test.TapSecondaryAt(entry, tapPos)
+	over = fyne.CurrentApp().Driver().CanvasForObject(entry).Overlay()
+	assert.NotNil(t, over)
+
+	cont = over.(*PopUp).Content
+	items = cont.(*Box).Children
+	assert.Equal(t, 2, len(items)) // Copy, Select All
+	firstDisabled := items[0]
+	test.Tap(entry.popUp)
+
+	entry.Password = true
+	test.TapSecondaryAt(entry, tapPos)
+	over = fyne.CurrentApp().Driver().CanvasForObject(entry).Overlay()
+	assert.Nil(t, over) // No popup for disabled password
+
+	entry.Enable()
+	test.TapSecondaryAt(entry, tapPos)
+	over = fyne.CurrentApp().Driver().CanvasForObject(entry).Overlay()
+	assert.NotNil(t, over)
+
+	cont = over.(*PopUp).Content
+	items = cont.(*Box).Children
+	assert.Equal(t, 2, len(items)) // Paste, Select All
+	assert.NotEqual(t, firstDisabled, items[0])
+}
+
+func TestEntry_FocusWithPopUp(t *testing.T) {
+	entry := NewEntry()
+	tapPos := fyne.NewPos(1, 1)
+	test.TapSecondaryAt(entry, tapPos)
+
+	assert.NotNil(t, entry.popUp)
+
+	test.Tap(entry.popUp)
+	assert.True(t, entry.Focused())
+}
+
+func TestEntry_HidePopUpOnEntry(t *testing.T) {
+	entry := NewEntry()
+	tapPos := fyne.NewPos(1, 1)
+
+	test.TapSecondaryAt(entry, tapPos)
+	test.Type(entry, "KJGFD")
+
+	assert.NotNil(t, entry.popUp)
+	assert.Equal(t, "KJGFD", entry.Text)
+	assert.Equal(t, true, entry.popUp.Hidden)
+}
+
+func TestEntry_MouseDownOnSelect(t *testing.T) {
+	entry := NewEntry()
+	entry.SetText("Ahnj\nBuki\n")
+	entry.selectAll()
+
+	testCharSize := theme.TextSize()
+	pos := fyne.NewPos(testCharSize, testCharSize*4) // tap below rows
+	ev := &fyne.PointEvent{Position: pos}
+
+	me := &desktop.MouseEvent{PointEvent: *ev, Button: desktop.RightMouseButton}
+	entry.MouseDown(me)
+	entry.MouseUp(me)
+
+	assert.Equal(t, entry.selectedText(), "Ahnj\nBuki\n")
+
+	me = &desktop.MouseEvent{PointEvent: *ev, Button: desktop.LeftMouseButton}
+	entry.MouseDown(me)
+	entry.MouseUp(me)
+
+	assert.Equal(t, entry.selectedText(), "")
 }
 
 func TestEntry_MouseClickAndDragAfterRow(t *testing.T) {
@@ -1018,6 +1131,18 @@ func TestEntry_MultilineSelect(t *testing.T) {
 	assert.Equal(t, 10, b)
 }
 
+func TestEntry_SelectAll(t *testing.T) {
+	e := NewMultiLineEntry()
+	e.SetText("First Row\nSecond Row\nThird Row")
+	e.selectAll()
+	a, b := e.selection()
+
+	assert.Equal(t, 0, a)
+	assert.Equal(t, 30, b)
+	assert.Equal(t, 2, e.CursorRow)
+	assert.Equal(t, 9, e.CursorColumn)
+}
+
 func TestEntry_SelectSnapping(t *testing.T) {
 
 	e := setup()
@@ -1206,4 +1331,113 @@ func TestEntry_EraseEmptySelection(t *testing.T) {
 	a, b = e.selection()
 	assert.Equal(t, -1, a)
 	assert.Equal(t, -1, b)
+}
+
+func TestPasswordEntry_Reveal(t *testing.T) {
+	t.Run("NewPasswordEntry constructor", func(t *testing.T) {
+		entry := NewPasswordEntry()
+		actionIcon := Renderer(entry).(*entryRenderer).entry.passwordRevealer
+
+		test.Type(entry, "Hié™שרה")
+		assert.Equal(t, "Hié™שרה", entry.Text)
+		assert.Equal(t, "*******", entryRenderTexts(entry)[0].Text)
+		assert.Equal(t, theme.VisibilityOffIcon(), actionIcon.icon.Resource)
+
+		// update the Password field
+		entry.Password = false
+		Refresh(entry)
+
+		assert.Equal(t, "Hié™שרה", entry.Text)
+		assert.Equal(t, "Hié™שרה", entryRenderTexts(entry)[0].Text)
+		assert.True(t, entry.Focused())
+		assert.Equal(t, theme.VisibilityIcon(), actionIcon.icon.Resource)
+
+		// tap on action icon
+		test.Tap(actionIcon)
+
+		assert.Equal(t, "Hié™שרה", entry.Text)
+		assert.Equal(t, "*******", entryRenderTexts(entry)[0].Text)
+		assert.True(t, entry.Focused())
+		assert.Equal(t, theme.VisibilityOffIcon(), actionIcon.icon.Resource)
+	})
+
+	// This test cover backward compatibility use case when on an Entry widget
+	// the Password field is set to true.
+	// In this case the action item should not be diplayed
+	t.Run("Entry with Password field", func(t *testing.T) {
+		entry := NewEntry()
+		entry.Password = true
+		entry.Refresh()
+
+		// action icon is not displayed
+		actionIcon := Renderer(entry).(*entryRenderer).entry.passwordRevealer
+		assert.Nil(t, actionIcon)
+
+		test.Type(entry, "Hié™שרה")
+		assert.Equal(t, "Hié™שרה", entry.Text)
+		assert.Equal(t, "*******", entryRenderTexts(entry)[0].Text)
+
+		// update the Password field
+		entry.Password = false
+		Refresh(entry)
+
+		assert.Equal(t, "Hié™שרה", entry.Text)
+		assert.Equal(t, "Hié™שרה", entryRenderTexts(entry)[0].Text)
+		assert.True(t, entry.Focused())
+		assert.Nil(t, actionIcon)
+	})
+}
+
+func TestEntry_PageUpDown(t *testing.T) {
+	t.Run("single line", func(*testing.T) {
+		e := NewEntry()
+		e.SetText("Testing")
+		// move right, press & hold shift and pagedown
+		typeKeys(e, fyne.KeyRight, keyShiftLeftDown, fyne.KeyPageDown)
+		a, b := e.selection()
+		assert.Equal(t, 1, a)
+		assert.Equal(t, 7, b)
+		assert.Equal(t, "esting", e.selectedText())
+		assert.Equal(t, 0, e.CursorRow)
+		assert.Equal(t, 7, e.CursorColumn)
+		// while shift is held press pageup
+		typeKeys(e, fyne.KeyPageUp)
+		a, b = e.selection()
+		assert.Equal(t, 0, a)
+		assert.Equal(t, 1, b)
+		assert.Equal(t, "T", e.selectedText())
+		assert.Equal(t, 0, e.CursorRow)
+		assert.Equal(t, 0, e.CursorColumn)
+		// release shift and press pagedown
+		typeKeys(e, keyShiftLeftUp, fyne.KeyPageDown)
+		assert.Equal(t, "", e.selectedText())
+		assert.Equal(t, 0, e.CursorRow)
+		assert.Equal(t, 7, e.CursorColumn)
+	})
+
+	t.Run("page down single line", func(*testing.T) {
+		e := NewMultiLineEntry()
+		e.SetText("Testing\nTesting\nTesting")
+		// move right, press & hold shift and pagedown
+		typeKeys(e, fyne.KeyRight, keyShiftLeftDown, fyne.KeyPageDown)
+		a, b := e.selection()
+		assert.Equal(t, 1, a)
+		assert.Equal(t, 23, b)
+		assert.Equal(t, "esting\nTesting\nTesting", e.selectedText())
+		assert.Equal(t, 2, e.CursorRow)
+		assert.Equal(t, 7, e.CursorColumn)
+		// while shift is held press pageup
+		typeKeys(e, fyne.KeyPageUp)
+		a, b = e.selection()
+		assert.Equal(t, 0, a)
+		assert.Equal(t, 1, b)
+		assert.Equal(t, "T", e.selectedText())
+		assert.Equal(t, 0, e.CursorRow)
+		assert.Equal(t, 0, e.CursorColumn)
+		// release shift and press pagedown
+		typeKeys(e, keyShiftLeftUp, fyne.KeyPageDown)
+		assert.Equal(t, "", e.selectedText())
+		assert.Equal(t, 2, e.CursorRow)
+		assert.Equal(t, 7, e.CursorColumn)
+	})
 }

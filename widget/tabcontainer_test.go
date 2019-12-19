@@ -6,6 +6,7 @@ import (
 	"fyne.io/fyne"
 	"fyne.io/fyne/canvas"
 	"fyne.io/fyne/driver/desktop"
+	"fyne.io/fyne/internal/cache"
 	"fyne.io/fyne/theme"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -79,16 +80,15 @@ func TestTabContainer_SetTabLocation(t *testing.T) {
 	tab2 := NewTabItem("Test2", NewLabel("Test2"))
 	tab3 := NewTabItem("Test3", NewLabel("Test3"))
 	tabs := NewTabContainer(tab1, tab2, tab3)
+	r := cache.Renderer(tabs).(*tabContainerRenderer)
 
-	r := Renderer(tabs).(*tabContainerRenderer)
-
-	buttons := r.tabBar.Children
+	buttons := r.tabBar.Objects
 	require.Len(t, buttons, 3)
 	content := tabs.Items[0].Content
 
 	tabs.SetTabLocation(TabLocationLeading)
+	tabs.Resize(r.MinSize())
 	assert.Equal(t, fyne.NewPos(0, 0), r.tabBar.Position())
-	assert.False(t, r.tabBar.Horizontal)
 	assert.Equal(t, fyne.NewPos(r.tabBar.MinSize().Width+theme.Padding(), 0), content.Position())
 	assert.Equal(t, fyne.NewPos(r.tabBar.MinSize().Width, 0), r.line.Position())
 	assert.Equal(t, fyne.NewSize(theme.Padding(), tabs.MinSize().Height), r.line.Size())
@@ -100,8 +100,8 @@ func TestTabContainer_SetTabLocation(t *testing.T) {
 	}
 
 	tabs.SetTabLocation(TabLocationBottom)
+	tabs.Resize(r.MinSize())
 	assert.Equal(t, fyne.NewPos(0, content.MinSize().Height+theme.Padding()), r.tabBar.Position())
-	assert.True(t, r.tabBar.Horizontal)
 	assert.Equal(t, fyne.NewPos(0, 0), content.Position())
 	assert.Equal(t, fyne.NewPos(0, content.Size().Height), r.line.Position())
 	assert.Equal(t, fyne.NewSize(tabs.MinSize().Width, theme.Padding()), r.line.Size())
@@ -113,8 +113,8 @@ func TestTabContainer_SetTabLocation(t *testing.T) {
 	}
 
 	tabs.SetTabLocation(TabLocationTrailing)
+	tabs.Resize(r.MinSize())
 	assert.Equal(t, fyne.NewPos(content.Size().Width+theme.Padding(), 0), r.tabBar.Position())
-	assert.False(t, r.tabBar.Horizontal)
 	assert.Equal(t, fyne.NewPos(0, 0), content.Position())
 	assert.Equal(t, fyne.NewPos(content.Size().Width, 0), r.line.Position())
 	assert.Equal(t, fyne.NewSize(theme.Padding(), tabs.MinSize().Height), r.line.Size())
@@ -126,8 +126,8 @@ func TestTabContainer_SetTabLocation(t *testing.T) {
 	}
 
 	tabs.SetTabLocation(TabLocationTop)
+	tabs.Resize(r.MinSize())
 	assert.Equal(t, fyne.NewPos(0, 0), r.tabBar.Position())
-	assert.True(t, r.tabBar.Horizontal)
 	assert.Equal(t, fyne.NewPos(0, r.tabBar.MinSize().Height+theme.Padding()), content.Position())
 	assert.Equal(t, fyne.NewPos(0, r.tabBar.MinSize().Height), r.line.Position())
 	assert.Equal(t, fyne.NewSize(tabs.MinSize().Width, theme.Padding()), r.line.Size())
@@ -147,9 +147,9 @@ func Test_tabContainer_Tapped(t *testing.T) {
 	)
 	r := Renderer(tabs).(*tabContainerRenderer)
 
-	tab1 := r.tabBar.Children[0].(*tabButton)
-	tab2 := r.tabBar.Children[1].(*tabButton)
-	tab3 := r.tabBar.Children[2].(*tabButton)
+	tab1 := r.tabBar.Objects[0].(*tabButton)
+	tab2 := r.tabBar.Objects[1].(*tabButton)
+	tab3 := r.tabBar.Objects[2].(*tabButton)
 	require.Equal(t, 0, tabs.CurrentTabIndex())
 	require.Equal(t, theme.PrimaryColor(), Renderer(tab1).BackgroundColor())
 
@@ -204,7 +204,7 @@ func TestTabContainerRenderer_ApplyTheme(t *testing.T) {
 	barColor := underline.FillColor
 
 	fyne.CurrentApp().Settings().SetTheme(theme.LightTheme())
-	Renderer(tabs).ApplyTheme()
+	Renderer(tabs).Refresh()
 	assert.NotEqual(t, barColor, underline.FillColor)
 }
 
@@ -345,11 +345,11 @@ func TestTabContainerRenderer_Layout(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tabs := NewTabContainer(tt.item)
 			r := Renderer(tabs).(*tabContainerRenderer)
-			require.Len(t, r.tabBar.Children, 1)
+			require.Len(t, r.tabBar.Objects, 1)
 			tabs.SetTabLocation(tt.location)
 			r.Layout(r.MinSize())
 
-			b := r.tabBar.Children[0].(*tabButton)
+			b := r.tabBar.Objects[0].(*tabButton)
 			assert.Equal(t, tt.wantButtonSize, b.Size())
 			br := Renderer(b).(*tabButtonRenderer)
 			if tt.item.Icon != nil {
@@ -391,7 +391,7 @@ func TestTabButtonRenderer_ApplyTheme(t *testing.T) {
 	textSize := render.label.TextSize
 	customTextSize := textSize
 	withTestTheme(func() {
-		render.ApplyTheme()
+		render.Refresh()
 		customTextSize = render.label.TextSize
 	})
 

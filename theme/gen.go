@@ -4,7 +4,6 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
 	"runtime"
@@ -21,12 +20,11 @@ func formatVariable(name string) string {
 }
 
 func bundleFile(name string, filepath string, f *os.File) {
-	bytes, err := ioutil.ReadFile(filepath)
+	res, err := fyne.LoadResourceFromPath(filepath)
 	if err != nil {
 		fyne.LogError("Unable to load file "+filepath, err)
 		return
 	}
-	res := fyne.NewStaticResource(path.Base(filepath), bytes)
 
 	_, err = f.WriteString(fmt.Sprintf("var %s = %#v\n", formatVariable(name), res))
 	if err != nil {
@@ -100,6 +98,8 @@ func main() {
 	bundleIcon("delete", f)
 	bundleIcon("search", f)
 	bundleIcon("search-replace", f)
+	bundleIcon("menu", f)
+	bundleIcon("menu-expand", f)
 
 	bundleIcon("check-box", f)
 	bundleIcon("check-box-blank", f)
@@ -148,6 +148,9 @@ func main() {
 	bundleIcon("view-zoom-fit", f)
 	bundleIcon("view-zoom-in", f)
 	bundleIcon("view-zoom-out", f)
+
+	bundleIcon("visibility", f)
+	bundleIcon("visibility-off", f)
 
 	f.Close()
 }

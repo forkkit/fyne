@@ -28,15 +28,17 @@ func (res *ThemedResource) Content() []byte {
 }
 
 // NewThemedResource creates a resource that adapts to the current theme setting.
-// TODO: In version 2.0 we need to change this signature to just accept a single StaticResource pointer
-func NewThemedResource(dark, light fyne.Resource) *ThemedResource {
-	if light != nil {
+//
+// Deprecated: NewThemedResource() will be replaced with a single parameter version in a future release
+// usage of this method will break, but using the first parameter only will be a trivial change.
+func NewThemedResource(src, ignored fyne.Resource) *ThemedResource {
+	if ignored != nil {
 		log.Println("Deprecation Warning: In version 2.0 NewThemedResource() will only accept a single StaticResource.\n" +
-			"While two resources are still supported to preserve backwards compatibility, only the first resource is rendered.  " +
+			"While two resources are still supported to preserve backwards compatibility, only the first resource is rendered.\n" +
 			"The resource color is set by the theme's IconColor().")
 	}
 	return &ThemedResource{
-		source: dark,
+		source: src,
 	}
 }
 
@@ -84,7 +86,7 @@ func colorizeResource(res fyne.Resource, clr color.Color) []byte {
 }
 
 var (
-	cancel, confirm, delete, search, searchReplace                              *ThemedResource
+	cancel, confirm, delete, search, searchReplace, menu, menuExpand            *ThemedResource
 	checked, unchecked, radioButton, radioButtonChecked                         *ThemedResource
 	contentAdd, contentRemove, contentCut, contentCopy, contentPaste            *ThemedResource
 	contentRedo, contentUndo, info, question, warning                           *ThemedResource
@@ -93,6 +95,7 @@ var (
 	arrowBack, arrowDown, arrowForward, arrowUp, arrowDropDown, arrowDropUp     *ThemedResource
 	folder, folderNew, folderOpen, help, home, settings                         *ThemedResource
 	viewFullScreen, viewRefresh, viewZoomFit, viewZoomIn, viewZoomOut           *ThemedResource
+	visibility, visibilityOff                                                   *ThemedResource
 )
 
 func init() {
@@ -101,6 +104,8 @@ func init() {
 	delete = NewThemedResource(deleteIconRes, nil)
 	search = NewThemedResource(searchIconRes, nil)
 	searchReplace = NewThemedResource(searchreplaceIconRes, nil)
+	menu = NewThemedResource(menuIconRes, nil)
+	menuExpand = NewThemedResource(menuexpandIconRes, nil)
 
 	checked = NewThemedResource(checkboxIconRes, nil)
 	unchecked = NewThemedResource(checkboxblankIconRes, nil)
@@ -149,6 +154,9 @@ func init() {
 	viewZoomFit = NewThemedResource(viewzoomfitIconRes, nil)
 	viewZoomIn = NewThemedResource(viewzoominIconRes, nil)
 	viewZoomOut = NewThemedResource(viewzoomoutIconRes, nil)
+
+	visibility = NewThemedResource(visibilityIconRes, nil)
+	visibilityOff = NewThemedResource(visibilityoffIconRes, nil)
 }
 
 // FyneLogo returns a resource containing the Fyne logo
@@ -179,6 +187,16 @@ func SearchIcon() fyne.Resource {
 // SearchReplaceIcon returns a resource containing the standard search and replace icon for the current theme
 func SearchReplaceIcon() fyne.Resource {
 	return searchReplace
+}
+
+// MenuIcon returns a resource containing the standard (mobile) menu icon for the current theme
+func MenuIcon() fyne.Resource {
+	return menu
+}
+
+// MenuExpandIcon returns a resource containing the standard (mobile) expand "submenu icon for the current theme
+func MenuExpandIcon() fyne.Resource {
+	return menuExpand
 }
 
 // CheckButtonIcon returns a resource containing the standard checkbox icon for the current theme
@@ -389,4 +407,14 @@ func ZoomInIcon() fyne.Resource {
 // ZoomOutIcon returns a resource containing the standard zoom out icon for the current theme
 func ZoomOutIcon() fyne.Resource {
 	return viewZoomOut
+}
+
+// VisibilityIcon returns a resource containing the standard visibity icon for the current theme
+func VisibilityIcon() fyne.Resource {
+	return visibility
+}
+
+// VisibilityOffIcon returns a resource containing the standard visibity off icon for the current theme
+func VisibilityOffIcon() fyne.Resource {
+	return visibilityOff
 }

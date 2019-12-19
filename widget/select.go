@@ -9,7 +9,7 @@ import (
 	"fyne.io/fyne/theme"
 )
 
-const noSelection = "(Select one)"
+const defaultPlaceHolder string = "(Select one)"
 
 type selectRenderer struct {
 	icon   *Icon
@@ -23,7 +23,7 @@ type selectRenderer struct {
 // MinSize calculates the minimum size of a select button.
 // This is based on the selected text, the drop icon and a standard amount of padding added.
 func (s *selectRenderer) MinSize() fyne.Size {
-	min := textMinSize(noSelection, s.label.TextSize, s.label.TextStyle)
+	min := textMinSize(s.combo.PlaceHolder, s.label.TextSize, s.label.TextStyle)
 
 	for _, option := range s.combo.Options {
 		optionMin := textMinSize(option, s.label.TextSize, s.label.TextStyle)
@@ -50,14 +50,6 @@ func (s *selectRenderer) Layout(size fyne.Size) {
 		(size.Height-theme.IconInlineSize())/2))
 }
 
-// ApplyTheme is called when the Button may need to update its look
-func (s *selectRenderer) ApplyTheme() {
-	s.label.Color = theme.TextColor()
-	s.label.TextSize = theme.TextSize()
-
-	s.Refresh()
-}
-
 func (s *selectRenderer) BackgroundColor() color.Color {
 	if s.combo.hovered {
 		return theme.HoverColor()
@@ -66,13 +58,20 @@ func (s *selectRenderer) BackgroundColor() color.Color {
 }
 
 func (s *selectRenderer) Refresh() {
+	s.label.Color = theme.TextColor()
+	s.label.TextSize = theme.TextSize()
+
+	if s.combo.PlaceHolder == "" {
+		s.combo.PlaceHolder = defaultPlaceHolder
+	}
+
 	if s.combo.Selected == "" {
-		s.label.Text = noSelection
+		s.label.Text = s.combo.PlaceHolder
 	} else {
 		s.label.Text = s.combo.Selected
 	}
 
-	if false { //s.combo.down {
+	if false { // s.combo.down {
 		s.icon.Resource = theme.MenuDropUpIcon()
 	} else {
 		s.icon.Resource = theme.MenuDropDownIcon()
@@ -97,44 +96,25 @@ func (s *selectRenderer) Destroy() {
 
 // Select widget has a list of options, with the current one shown, and triggers an event func when clicked
 type Select struct {
-	baseWidget
-	Selected string
-	Options  []string
+	BaseWidget
 
-	OnChanged func(string) `json:"-"`
-	hovered   bool
-	popUp     *PopUp
+	Selected    string
+	Options     []string
+	PlaceHolder string
+	OnChanged   func(string) `json:"-"`
+
+	hovered bool
+	popUp   *PopUp
 }
 
 // Resize sets a new size for a widget.
 // Note this should not be used if the widget is being managed by a Layout within a Container.
 func (s *Select) Resize(size fyne.Size) {
-	s.resize(size, s)
+	s.BaseWidget.Resize(size)
 
 	if s.popUp != nil {
 		s.popUp.Content.Resize(fyne.NewSize(size.Width, s.popUp.MinSize().Height))
 	}
-}
-
-// Move the widget to a new position, relative to its parent.
-// Note this should not be used if the widget is being managed by a Layout within a Container.
-func (s *Select) Move(pos fyne.Position) {
-	s.move(pos, s)
-}
-
-// MinSize returns the smallest size this widget can shrink to
-func (s *Select) MinSize() fyne.Size {
-	return s.minSize(s)
-}
-
-// Show this widget, if it was previously hidden
-func (s *Select) Show() {
-	s.show(s)
-}
-
-// Hide this widget, if it was previously visible
-func (s *Select) Hide() {
-	s.hide(s)
 }
 
 func (s *Select) optionTapped(text string) {
@@ -154,12 +134,12 @@ func (s *Select) Tapped(*fyne.PointEvent) {
 		})
 		items = append(items, item)
 	}
-	s.popUp = NewPopUpMenu(fyne.NewMenu("", items...), c)
 
 	buttonPos := fyne.CurrentApp().Driver().AbsolutePositionForObject(s)
 	popUpPos := buttonPos.Add(fyne.NewPos(0, s.Size().Height))
 
-	s.popUp.Move(popUpPos)
+	s.popUp = NewPopUpMenuAtPosition(fyne.NewMenu("", items...), c, popUpPos)
+	s.popUp.Resize(fyne.NewSize(s.Size().Width, s.popUp.Content.MinSize().Height))
 }
 
 // TappedSecondary is called when a secondary pointer tapped event is captured
@@ -182,13 +162,23 @@ func (s *Select) MouseOut() {
 func (s *Select) MouseMoved(*desktop.MouseEvent) {
 }
 
+// MinSize returns the size that this widget should not shrink below
+func (s *Select) MinSize() fyne.Size {
+	s.ExtendBaseWidget(s)
+	return s.BaseWidget.MinSize()
+}
+
 // CreateRenderer is a private method to Fyne which links this widget to its renderer
 func (s *Select) CreateRenderer() fyne.WidgetRenderer {
+	s.ExtendBaseWidget(s)
 	icon := NewIcon(theme.MenuDropDownIcon())
-
 	text := canvas.NewText(s.Selected, theme.TextColor())
+
+	if s.PlaceHolder == "" {
+		s.PlaceHolder = defaultPlaceHolder
+	}
 	if s.Selected == "" {
-		text.Text = noSelection
+		text.Text = s.PlaceHolder
 	}
 	text.Alignment = fyne.TextAlignLeading
 
@@ -217,7 +207,7 @@ func (s *Select) SetSelected(text string) {
 
 // NewSelect creates a new select widget with the set list of options and changes handler
 func NewSelect(options []string, changed func(string)) *Select {
-	combo := &Select{baseWidget{}, "", options, changed, false, nil}
+	combo := &Select{BaseWidget{}, "", options, defaultPlaceHolder, changed, false, nil}
 
 	Renderer(combo).Layout(combo.MinSize())
 	return combo

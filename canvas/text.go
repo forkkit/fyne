@@ -4,7 +4,6 @@ import (
 	"image/color"
 
 	"fyne.io/fyne"
-	"fyne.io/fyne/theme"
 )
 
 // Declare conformity with CanvasObject interface
@@ -29,11 +28,16 @@ func (t *Text) MinSize() fyne.Size {
 	return fyne.CurrentApp().Driver().RenderedTextSize(t.Text, t.TextSize, t.TextStyle)
 }
 
+// Refresh causes this object to be redrawn in it's current state
+func (t *Text) Refresh() {
+	Refresh(t)
+}
+
 // NewText returns a new Text implementation
 func NewText(text string, color color.Color) *Text {
 	return &Text{
 		Color:    color,
 		Text:     text,
-		TextSize: theme.TextSize(),
+		TextSize: fyne.CurrentApp().Settings().Theme().TextSize(),
 	}
 }
