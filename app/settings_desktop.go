@@ -3,6 +3,7 @@
 package app
 
 import (
+	"os"
 	"path/filepath"
 
 	"fyne.io/fyne"
@@ -10,9 +11,23 @@ import (
 )
 
 func watchFileAddTarget(watcher *fsnotify.Watcher, path string) {
-	err := watcher.Add(filepath.Dir(path))
+	dir := filepath.Dir(path)
+	ensureDirExists(dir)
+
+	err := watcher.Add(dir)
 	if err != nil {
 		fyne.LogError("Settings watch error:", err)
+	}
+}
+
+func ensureDirExists(dir string) {
+	if stat, err := os.Stat(dir); err == nil && stat.IsDir() {
+		return
+	}
+
+	err := os.Mkdir(dir, 0700)
+	if err != nil {
+		fyne.LogError("Unable to create settings storage:", err)
 	}
 }
 
@@ -26,7 +41,8 @@ func watchFile(path string, callback func()) *fsnotify.Watcher {
 	go func() {
 		for event := range watcher.Events {
 			if event.Op&fsnotify.Remove != 0 { // if it was deleted then watch again
-				watcher.Remove(path)
+				watcher.Remove(path) // fsnotify returns false positives, see https://github.com/fsnotify/fsnotify/issues/268
+
 				watchFileAddTarget(watcher, path)
 			} else {
 				callback()
@@ -52,5 +68,5 @@ func (s *settings) stopWatching() {
 		return
 	}
 
-	s.watcher.(*fsnotify.Watcher).Close()
+	s.watcher.(*fsnotify.Watcher).Close() // fsnotify returns false positives, see https://github.com/fsnotify/fsnotify/issues/268
 }

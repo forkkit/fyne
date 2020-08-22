@@ -1,12 +1,12 @@
 package widget
 
 import (
-	"image/color"
 	"math"
 
 	"fyne.io/fyne"
 	"fyne.io/fyne/canvas"
 	"fyne.io/fyne/driver/desktop"
+	"fyne.io/fyne/internal/widget"
 	"fyne.io/fyne/theme"
 )
 
@@ -20,10 +20,9 @@ type radioRenderItem struct {
 }
 
 type radioRenderer struct {
+	widget.BaseRenderer
 	items []*radioRenderItem
-
-	objects []fyne.CanvasObject
-	radio   *Radio
+	radio *Radio
 }
 
 func removeDuplicates(options []string) []string {
@@ -100,14 +99,16 @@ func (r *radioRenderer) applyTheme() {
 	}
 }
 
-func (r *radioRenderer) BackgroundColor() color.Color {
-	return theme.BackgroundColor()
-}
-
 func (r *radioRenderer) Refresh() {
+	r.radio.propertyLock.RLock()
 	r.applyTheme()
 	r.radio.removeDuplicateOptions()
+	r.updateItems()
+	r.radio.propertyLock.RUnlock()
+	canvas.Refresh(r.radio.super())
+}
 
+func (r *radioRenderer) updateItems() {
 	if len(r.items) < len(r.radio.Options) {
 		for i := len(r.items); i < len(r.radio.Options); i++ {
 			option := r.radio.Options[i]
@@ -118,14 +119,14 @@ func (r *radioRenderer) Refresh() {
 
 			focusIndicator := canvas.NewCircle(theme.BackgroundColor())
 
-			r.objects = append(r.objects, focusIndicator, icon, text)
+			r.SetObjects(append(r.Objects(), focusIndicator, icon, text))
 			r.items = append(r.items, &radioRenderItem{icon, text, focusIndicator})
 		}
 		r.Layout(r.radio.Size())
 	} else if len(r.items) > len(r.radio.Options) {
 		total := len(r.radio.Options)
 		r.items = r.items[:total]
-		r.objects = r.objects[:total*2]
+		r.SetObjects(r.Objects()[:total*2])
 	}
 
 	for i, item := range r.items {
@@ -143,34 +144,26 @@ func (r *radioRenderer) Refresh() {
 
 		if r.radio.Disabled() {
 			item.focusIndicator.FillColor = theme.BackgroundColor()
-		} else if r.radio.hoveredItemIndex == i {
+		} else if r.radio.hovered && r.radio.hoveredItemIndex == i {
 			item.focusIndicator.FillColor = theme.HoverColor()
 		} else {
 			item.focusIndicator.FillColor = theme.BackgroundColor()
 		}
 	}
-
-	canvas.Refresh(r.radio)
-}
-
-func (r *radioRenderer) Objects() []fyne.CanvasObject {
-	return r.objects
-}
-
-func (r *radioRenderer) Destroy() {
 }
 
 // Radio widget has a list of text labels and radio check icons next to each.
 // Changing the selection (only one can be selected) will trigger the changed func.
 type Radio struct {
 	DisableableWidget
-	Options  []string
-	Selected string
-
-	OnChanged  func(string) `json:"-"`
 	Horizontal bool
+	Required   bool
+	OnChanged  func(string) `json:"-"`
+	Options    []string
+	Selected   string
 
 	hoveredItemIndex int
+	hovered          bool
 }
 
 // indexByPosition returns the item index for a specified position or noRadioItemIndex if any
@@ -194,13 +187,15 @@ func (r *Radio) MouseIn(event *desktop.MouseEvent) {
 	}
 
 	r.hoveredItemIndex = r.indexByPosition(event.Position)
-	Refresh(r)
+	r.hovered = true
+	r.Refresh()
 }
 
 // MouseOut is called when a desktop pointer exits the widget
 func (r *Radio) MouseOut() {
 	r.hoveredItemIndex = noRadioItemIndex
-	Refresh(r)
+	r.hovered = false
+	r.Refresh()
 }
 
 // MouseMoved is called when a desktop pointer hovers over the widget
@@ -210,14 +205,15 @@ func (r *Radio) MouseMoved(event *desktop.MouseEvent) {
 	}
 
 	r.hoveredItemIndex = r.indexByPosition(event.Position)
-	Refresh(r)
+	r.hovered = true
+	r.Refresh()
 }
 
 // Append adds a new option to the end of a Radio widget.
 func (r *Radio) Append(option string) {
 	r.Options = append(r.Options, option)
 
-	Refresh(r)
+	r.Refresh()
 }
 
 // Tapped is called when a pointer tapped event is captured and triggers any change handler
@@ -228,12 +224,15 @@ func (r *Radio) Tapped(event *fyne.PointEvent) {
 
 	index := r.indexByPosition(event.Position)
 
-	if index == noRadioItemIndex { // in the padding
+	if index < 0 || index >= len(r.Options) { // in the padding
 		return
 	}
 	clicked := r.Options[index]
 
 	if r.Selected == clicked {
+		if r.Required {
+			return
+		}
 		r.Selected = ""
 	} else {
 		r.Selected = clicked
@@ -242,11 +241,7 @@ func (r *Radio) Tapped(event *fyne.PointEvent) {
 	if r.OnChanged != nil {
 		r.OnChanged(r.Selected)
 	}
-	Renderer(r).Refresh()
-}
-
-// TappedSecondary is called when a secondary pointer tapped event is captured
-func (r *Radio) TappedSecondary(*fyne.PointEvent) {
+	r.Refresh()
 }
 
 // MinSize returns the size that this widget should not shrink below
@@ -258,6 +253,8 @@ func (r *Radio) MinSize() fyne.Size {
 // CreateRenderer is a private method to Fyne which links this widget to its renderer
 func (r *Radio) CreateRenderer() fyne.WidgetRenderer {
 	r.ExtendBaseWidget(r)
+	r.propertyLock.RLock()
+	defer r.propertyLock.RUnlock()
 	var items []*radioRenderItem
 	var objects []fyne.CanvasObject
 
@@ -273,7 +270,11 @@ func (r *Radio) CreateRenderer() fyne.WidgetRenderer {
 		items = append(items, &radioRenderItem{icon, text, focusIndicator})
 	}
 
-	return &radioRenderer{items, objects, r}
+	rr := &radioRenderer{widget.NewBaseRenderer(objects), items, r}
+	rr.applyTheme()
+	r.removeDuplicateOptions()
+	rr.updateItems()
+	return rr
 }
 
 // SetSelected sets the radio option, it can be used to set a default option.
@@ -284,7 +285,7 @@ func (r *Radio) SetSelected(option string) {
 
 	r.Selected = option
 
-	Renderer(r).Refresh()
+	r.Refresh()
 }
 
 func (r *Radio) itemHeight() int {
@@ -292,7 +293,11 @@ func (r *Radio) itemHeight() int {
 		return r.MinSize().Height
 	}
 
-	return r.MinSize().Height / len(r.Options)
+	count := 1
+	if r.Options != nil && len(r.Options) > 0 {
+		count = len(r.Options)
+	}
+	return r.MinSize().Height / count
 }
 
 func (r *Radio) itemWidth() int {
@@ -300,7 +305,11 @@ func (r *Radio) itemWidth() int {
 		return r.MinSize().Width
 	}
 
-	return r.MinSize().Width / len(r.Options)
+	count := 1
+	if r.Options != nil && len(r.Options) > 0 {
+		count = len(r.Options)
+	}
+	return r.MinSize().Width / count
 }
 
 func (r *Radio) removeDuplicateOptions() {
@@ -310,12 +319,9 @@ func (r *Radio) removeDuplicateOptions() {
 // NewRadio creates a new radio widget with the set options and change handler
 func NewRadio(options []string, changed func(string)) *Radio {
 	r := &Radio{
-		DisableableWidget{},
-		options,
-		"",
-		changed,
-		false,
-		noRadioItemIndex,
+		DisableableWidget: DisableableWidget{},
+		Options:           options,
+		OnChanged:         changed,
 	}
 
 	r.removeDuplicateOptions()

@@ -14,6 +14,9 @@ import (
 
 const fontFace = "NotoSans"
 
+const fileHeader = "// auto-generated\n" + // to exclude this file in goreportcard
+	"// **** THIS FILE IS AUTO-GENERATED, PLEASE DO NOT EDIT IT **** //"
+
 func formatVariable(name string) string {
 	str := strings.Replace(name, "-", "", -1)
 	return strings.Replace(str, "_", "", -1)
@@ -36,7 +39,7 @@ func bundleFont(font, name string, f *os.File) {
 	_, dirname, _, _ := runtime.Caller(0)
 	path := path.Join(path.Dir(dirname), "font", fmt.Sprintf("%s-%s.ttf", font, name))
 
-	if name == "Regular" && font != fontFace {
+	if name == "Powerline" && font != fontFace {
 		name = "Monospace"
 	}
 
@@ -64,7 +67,7 @@ func openFile(filename string) *os.File {
 		return nil
 	}
 
-	_, err = f.WriteString("// **** THIS FILE IS AUTO-GENERATED, PLEASE DO NOT EDIT IT **** //\n\npackage theme\n\nimport \"fyne.io/fyne\"\n\n")
+	_, err = f.WriteString(fileHeader + "\n\npackage theme\n\nimport \"fyne.io/fyne\"\n\n")
 	if err != nil {
 		fyne.LogError("Unable to write file "+filename, err)
 		return nil
@@ -82,7 +85,7 @@ func main() {
 	bundleFont(fontFace, "Bold", f)
 	bundleFont(fontFace, "Italic", f)
 	bundleFont(fontFace, "BoldItalic", f)
-	bundleFont("NotoMono", "Regular", f)
+	bundleFont("DejaVuSansMono", "Powerline", f)
 	f.Close()
 
 	f = openFile("bundled-icons.go")
@@ -114,6 +117,7 @@ func main() {
 	bundleIcon("content-redo", f)
 	bundleIcon("content-undo", f)
 
+	bundleIcon("document", f)
 	bundleIcon("document-create", f)
 	bundleIcon("document-print", f)
 	bundleIcon("document-save", f)
@@ -129,6 +133,12 @@ func main() {
 	bundleIcon("arrow-drop-down", f)
 	bundleIcon("arrow-drop-up", f)
 
+	bundleIcon("file", f)
+	bundleIcon("file-application", f)
+	bundleIcon("file-audio", f)
+	bundleIcon("file-image", f)
+	bundleIcon("file-text", f)
+	bundleIcon("file-video", f)
 	bundleIcon("folder", f)
 	bundleIcon("folder-new", f)
 	bundleIcon("folder-open", f)
@@ -143,14 +153,31 @@ func main() {
 	bundleIcon("mail-reply_all", f)
 	bundleIcon("mail-send", f)
 
+	bundleIcon("media-fast-forward", f)
+	bundleIcon("media-fast-rewind", f)
+	bundleIcon("media-pause", f)
+	bundleIcon("media-play", f)
+	bundleIcon("media-record", f)
+	bundleIcon("media-replay", f)
+	bundleIcon("media-skip-next", f)
+	bundleIcon("media-skip-previous", f)
+
 	bundleIcon("view-fullscreen", f)
 	bundleIcon("view-refresh", f)
 	bundleIcon("view-zoom-fit", f)
 	bundleIcon("view-zoom-in", f)
 	bundleIcon("view-zoom-out", f)
 
+	bundleIcon("volume-down", f)
+	bundleIcon("volume-mute", f)
+	bundleIcon("volume-up", f)
+
 	bundleIcon("visibility", f)
 	bundleIcon("visibility-off", f)
+
+	bundleIcon("download", f)
+	bundleIcon("computer", f)
+	bundleIcon("storage", f)
 
 	f.Close()
 }
